@@ -1,6 +1,10 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter_internet_signal/flutter_internet_signal.dart';
+import 'package:flutter/services.dart';
 
 final addressStringProvider = Provider(
   (ref) => "http://192.168.1.72:8000/ciao.json",
@@ -9,6 +13,55 @@ final addressStringProvider = Provider(
 final coordinatesProvider = StreamProvider((ref) {
   return _determinePositionStream();
 });
+
+// final mobileStreamProvider = StreamProvider((ref) {
+//   return _mobileSignalStream();
+// });
+
+// final _internetSignal = Provider((ref) {
+//   return FlutterInternetSignal();
+// });
+
+// final mobileSignalProvider = FutureProvider((ref) async {
+//   // final internetSignal = FlutterInternetSignal();
+//   // return await internetSignal.getMobileSignalStrength();
+
+//   try {
+//     final internetSignal = FlutterInternetSignal();
+//     return await internetSignal.getMobileSignalStrength();
+//   } on PlatformException {
+//     if (kDebugMode) print('Error get mobile signal.');
+//   }
+// });
+
+final mobileSignalProvider = StreamProvider((ref) async* {
+  final internetSignal = FlutterInternetSignal();
+  while (true) {
+    try {
+      final mobileSignalStrength = await internetSignal
+          .getMobileSignalStrength();
+      yield mobileSignalStrength;
+    } on PlatformException {
+      if (kDebugMode) print('Error get mobile signal.');
+    }
+    await Future.delayed(const Duration(seconds: 2));
+  }
+});
+
+//final _internetSignal = FlutterInternetSignal();
+
+// Stream<FlutterInternetSignal> _mobileSignalStream() async* {
+//   final internetSignal = FlutterInternetSignal();
+//   Timer? _pollingTimer;
+
+//   _pollingTimer = Timer.periodic(const Duration(seconds: 1), (_) async* {
+//     try {
+//       yield await internetSignal.getMobileSignalStrength();
+//     } catch (e) {
+//       if (kDebugMode) print('Error open signal: $e');
+//     }
+//   });
+// }
 
 Stream<Position> _determinePositionStream() async* {
   bool serviceEnabled;
@@ -79,6 +132,7 @@ class MyHomePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final coordinates = ref.watch(coordinatesProvider);
+    final mobileSignal = ref.watch(mobileSignalProvider);
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
@@ -88,13 +142,37 @@ class MyHomePage extends ConsumerWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text("Scritta 1", style: TextStyle(fontSize: 24)),
+            mobileSignal.when(
+              data: (mobileSignal) {
+                return Column(
+                  children: [
+                    Text(
+                      'Mobile signal: $mobileSignal [dBm]\n',
+                      style: const TextStyle(fontSize: 24),
+                    ),
+                  ],
+                );
+              },
+              error: (error, _) {
+                return Text(
+                  "Errore: $error",
+                  style: const TextStyle(fontSize: 24),
+                );
+              },
+              loading: () {
+                return const Text(
+                  "Caricamento...",
+                  style: TextStyle(fontSize: 24),
+                );
+              },
+            ),
             coordinates.when(
               data: (position) {
                 return Column(
                   children: [
                     Text(
                       "Latitude: ${position.latitude}",
+                      //'Mobile signal: $mobileSignal [dBm]\n',
                       style: const TextStyle(fontSize: 24),
                     ),
                     Text(
