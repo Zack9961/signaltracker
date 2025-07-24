@@ -5,34 +5,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_internet_signal/flutter_internet_signal.dart';
 import 'package:flutter/services.dart';
+import 'package:influxdb_client/api.dart';
 
-final addressStringProvider = Provider(
-  (ref) => "http://192.168.1.72:8000/ciao.json",
+// final addressStringProvider = Provider(
+//   (ref) => "http://192.168.1.72:8000/ciao.json",
+// );
+
+final InfluxDBClient influxDBClient = InfluxDBClient(
+  url: 'http://informatica-iot.freeddns.org:8086', // URL dal manuale [3]
+  token:
+      'qt5kHYb2Wwg19lbGEOe3BmVJhlMf6ZxfDu_Z7Lrhiiiv9FTEGKiD_pJzkDa_qSlUPLPm0zI-1yE6THb4kg-0kA==', // Token dal manuale [3]
+  org: 'uniurb', // Organizzazione dal manuale [3]
+  bucket: 'esercitazioni', // Bucket dal manuale [3]
+  debug: kDebugMode, // Utile per il debug, già presente nel tuo codice
+);
+
+// Puoi definire un provider per il client InfluxDB se preferisci
+final influxDBClientProvider = Provider<InfluxDBClient>(
+  (ref) => influxDBClient,
 );
 
 final coordinatesProvider = StreamProvider((ref) {
   return _determinePositionStream();
 });
-
-// final mobileStreamProvider = StreamProvider((ref) {
-//   return _mobileSignalStream();
-// });
-
-// final _internetSignal = Provider((ref) {
-//   return FlutterInternetSignal();
-// });
-
-// final mobileSignalProvider = FutureProvider((ref) async {
-//   // final internetSignal = FlutterInternetSignal();
-//   // return await internetSignal.getMobileSignalStrength();
-
-//   try {
-//     final internetSignal = FlutterInternetSignal();
-//     return await internetSignal.getMobileSignalStrength();
-//   } on PlatformException {
-//     if (kDebugMode) print('Error get mobile signal.');
-//   }
-// });
 
 final mobileSignalProvider = StreamProvider((ref) async* {
   final internetSignal = FlutterInternetSignal();
@@ -47,21 +42,6 @@ final mobileSignalProvider = StreamProvider((ref) async* {
     await Future.delayed(const Duration(seconds: 2));
   }
 });
-
-//final _internetSignal = FlutterInternetSignal();
-
-// Stream<FlutterInternetSignal> _mobileSignalStream() async* {
-//   final internetSignal = FlutterInternetSignal();
-//   Timer? _pollingTimer;
-
-//   _pollingTimer = Timer.periodic(const Duration(seconds: 1), (_) async* {
-//     try {
-//       yield await internetSignal.getMobileSignalStrength();
-//     } catch (e) {
-//       if (kDebugMode) print('Error open signal: $e');
-//     }
-//   });
-// }
 
 Stream<Position> _determinePositionStream() async* {
   bool serviceEnabled;
@@ -103,6 +83,23 @@ Stream<Position> _determinePositionStream() async* {
   }
 }
 
+// Esempio di creazione di un punto dati
+Point createDataPointGPS({
+  required double latitude,
+  required double longitude,
+  //required int mobileSignal, // Assumendo mobileSignalStrength sia un int (dBm)
+  required String location,
+  required String room,
+}) {
+  return Point('corso_IoT') // Measurement [3]
+      .addTag('location', location) // Tag obbligatorio [3]
+      .addTag('room', room) // Tag obbligatorio [3]
+      .addField('latitude', latitude)
+      .addField('longitude', longitude);
+  //.addField('mobileSignal', mobileSignal);
+  // .time(DateTime.now().toUtc()); // Il timestamp può essere aggiunto esplicitamente o lasciato generare al server
+}
+
 void main() {
   runApp(ProviderScope(child: const MyApp()));
 }
@@ -133,6 +130,10 @@ class MyHomePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final coordinates = ref.watch(coordinatesProvider);
     final mobileSignal = ref.watch(mobileSignalProvider);
+    final influxDBClient = ref.watch(
+      influxDBClientProvider,
+    ); // Ottieni l'istanza del client
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
@@ -168,11 +169,22 @@ class MyHomePage extends ConsumerWidget {
             ),
             coordinates.when(
               data: (position) {
+                final currentPosition = coordinates
+                    .valueOrNull; // Prende l'ultimo valore disponibile
+                if (currentPosition != null) {
+                  final point = createDataPointGPS(
+                    latitude: currentPosition.latitude,
+                    longitude: currentPosition.longitude,
+                    location: 'IlTuoLuogo', // Sostituisci con valori reali
+                    room: 'LaTuaStanza', // Sostituisci con valori reali
+                  );
+                  _sendDataToInfluxDB(influxDBClient, point);
+                }
+
                 return Column(
                   children: [
                     Text(
                       "Latitude: ${position.latitude}",
-                      //'Mobile signal: $mobileSignal [dBm]\n',
                       style: const TextStyle(fontSize: 24),
                     ),
                     Text(
@@ -205,5 +217,21 @@ class MyHomePage extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  // Funzione per inviare i dati a InfluxDB
+  void _sendDataToInfluxDB(InfluxDBClient client, Point point) async {
+    var writeApi = WriteService(client);
+    //final writeApi = client.getWriteService();
+    try {
+      await writeApi.write(point);
+      if (kDebugMode) {
+        //print('Dati inviati a InfluxDB: ${point.toLineProtocol()}');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Errore durante l\'invio a InfluxDB: $e');
+      }
+    }
   }
 }

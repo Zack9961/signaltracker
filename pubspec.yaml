@@ -37,6 +37,7 @@ dependencies:
   flutter_riverpod: ^2.6.1
   geolocator: ^14.0.2
   flutter_internet_signal: ^0.0.43
+  influxdb_client: ^2.11.0
 
 dev_dependencies:
   flutter_test:
