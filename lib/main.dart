@@ -6,18 +6,19 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter_internet_signal/flutter_internet_signal.dart';
 import 'package:flutter/services.dart';
 import 'package:influxdb_client/api.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 
 // final addressStringProvider = Provider(
 //   (ref) => "http://192.168.1.72:8000/ciao.json",
 // );
 
 final InfluxDBClient influxDBClient = InfluxDBClient(
-  url: 'http://informatica-iot.freeddns.org:8086', // URL dal manuale [3]
+  url: 'http://informatica-iot.freeddns.org:8086',
   token:
-      'qt5kHYb2Wwg19lbGEOe3BmVJhlMf6ZxfDu_Z7Lrhiiiv9FTEGKiD_pJzkDa_qSlUPLPm0zI-1yE6THb4kg-0kA==', // Token dal manuale [3]
-  org: 'uniurb', // Organizzazione dal manuale [3]
-  bucket: 'esercitazioni', // Bucket dal manuale [3]
-  debug: kDebugMode, // Utile per il debug, già presente nel tuo codice
+      'qt5kHYb2Wwg19lbGEOe3BmVJhlMf6ZxfDu_Z7Lrhiiiv9FTEGKiD_pJzkDa_qSlUPLPm0zI-1yE6THb4kg-0kA==',
+  org: 'uniurb',
+  bucket: 'esercitazioni',
+  debug: kDebugMode,
 );
 
 // Puoi definire un provider per il client InfluxDB se preferisci
@@ -42,6 +43,16 @@ final mobileSignalProvider = StreamProvider((ref) async* {
     await Future.delayed(const Duration(seconds: 2));
   }
 });
+
+final deviceIdProvider = FutureProvider((ref) {
+  return _getDeviceId();
+});
+
+Future<String> _getDeviceId() async {
+  DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+  AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+  return androidInfo.model; // e.g. "Moto G (4)"
+}
 
 Stream<Position> _determinePositionStream() async* {
   bool serviceEnabled;
@@ -83,34 +94,32 @@ Stream<Position> _determinePositionStream() async* {
   }
 }
 
-// Esempio di creazione di un punto dati
 Point createDataPointGPS({
   required double latitude,
   required double longitude,
-  //required int mobileSignal, // Assumendo mobileSignalStrength sia un int (dBm)
   required String location,
   required String room,
+  required String deviceId,
 }) {
-  return Point('corso_IoT') // Measurement [3]
-      .addTag('location', location) // Tag obbligatorio [3]
-      .addTag('room', room) // Tag obbligatorio [3]
+  return Point('corso_IoT')
+      .addTag('location', location)
+      .addTag('room', room)
+      .addTag('deviceId', deviceId)
       .addField('latitude', latitude)
       .addField('longitude', longitude);
-  //.addField('mobileSignal', mobileSignal);
-  // .time(DateTime.now().toUtc()); // Il timestamp può essere aggiunto esplicitamente o lasciato generare al server
 }
 
-// Esempio di creazione di un punto dati
 Point createDataPointSignal({
-  required int mobileSignal, // Assumendo mobileSignalStrength sia un int (dBm)
+  required int mobileSignal,
   required String location,
   required String room,
+  required String deviceId,
 }) {
-  return Point('corso_IoT') // Measurement [3]
-      .addTag('location', location) // Tag obbligatorio [3]
-      .addTag('room', room) // Tag obbligatorio [3]
+  return Point('corso_IoT')
+      .addTag('location', location)
+      .addTag('room', room)
+      .addTag('deviceId', deviceId)
       .addField('mobileSignal', mobileSignal);
-  // .time(DateTime.now().toUtc()); // Il timestamp può essere aggiunto esplicitamente o lasciato generare al server
 }
 
 void main() {
@@ -120,7 +129,6 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -146,6 +154,7 @@ class MyHomePage extends ConsumerWidget {
     final influxDBClient = ref.watch(
       influxDBClientProvider,
     ); // Ottieni l'istanza del client
+    final deviceIdAsyncValue = ref.watch(deviceIdProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -158,12 +167,12 @@ class MyHomePage extends ConsumerWidget {
           children: [
             mobileSignal.when(
               data: (mobileSignal) {
-                //final currentPosition = mobileSignal; // Prende l'ultimo valore disponibile
                 if (mobileSignal != null) {
                   final point = createDataPointSignal(
                     mobileSignal: mobileSignal,
-                    location: 'Marche', // Sostituisci con valori reali
-                    room: 'PesaroUrbino', // Sostituisci con valori reali
+                    location: 'Marche',
+                    room: 'PesaroUrbino',
+                    deviceId: deviceIdAsyncValue.value.toString(),
                   );
                   _sendDataToInfluxDB(influxDBClient, point);
                 }
@@ -178,31 +187,31 @@ class MyHomePage extends ConsumerWidget {
               },
               error: (error, _) {
                 return Text(
-                  "Errore: $error",
+                  "Errore: $error \n",
                   style: const TextStyle(fontSize: 24),
                 );
               },
               loading: () {
-                return const Text(
-                  "Caricamento...",
-                  style: TextStyle(fontSize: 24),
-                );
+                // return const Text(
+                //   "Caricamento... \n",
+                //   style: TextStyle(fontSize: 24),
+                // );
+                return const CircularProgressIndicator();
               },
             ),
             coordinates.when(
               data: (position) {
-                final currentPosition = coordinates
-                    .valueOrNull; // Prende l'ultimo valore disponibile
+                final currentPosition = coordinates.valueOrNull;
                 if (currentPosition != null) {
                   final point = createDataPointGPS(
                     latitude: currentPosition.latitude,
                     longitude: currentPosition.longitude,
-                    location: 'Marche', // Sostituisci con valori reali
-                    room: 'PesaroUrbino', // Sostituisci con valori reali
+                    location: 'Marche',
+                    room: 'PesaroUrbino',
+                    deviceId: deviceIdAsyncValue.value.toString(),
                   );
                   _sendDataToInfluxDB(influxDBClient, point);
                 }
-
                 return Column(
                   children: [
                     Text(
@@ -210,7 +219,7 @@ class MyHomePage extends ConsumerWidget {
                       style: const TextStyle(fontSize: 24),
                     ),
                     Text(
-                      "Longitude: ${position.longitude}",
+                      "Longitude: ${position.longitude}\n",
                       style: const TextStyle(fontSize: 24),
                     ),
                   ],
@@ -218,18 +227,43 @@ class MyHomePage extends ConsumerWidget {
               },
               error: (error, _) {
                 return Text(
-                  "Errore: $error",
+                  "Errore: $error \n",
                   style: const TextStyle(fontSize: 24),
                 );
               },
               loading: () {
-                return const Text(
-                  "Caricamento...",
-                  style: TextStyle(fontSize: 24),
-                );
+                // return const Text(
+                //   "Caricamento...\n",
+                //   style: TextStyle(fontSize: 24),
+                // );
+                return const CircularProgressIndicator();
               },
             ),
-            const Text("Scritta 4", style: TextStyle(fontSize: 24)),
+            deviceIdAsyncValue.when(
+              data: (deviceId) {
+                return Column(
+                  children: [
+                    Text(
+                      'Device Info: $deviceId \n',
+                      style: const TextStyle(fontSize: 24),
+                    ),
+                  ],
+                );
+              },
+              error: (error, _) {
+                return Text(
+                  "Errore: $error \n",
+                  style: const TextStyle(fontSize: 24),
+                );
+              },
+              loading: () {
+                // return const Text(
+                //   "Caricamento...\n",
+                //   style: TextStyle(fontSize: 24),
+                // );
+                return const CircularProgressIndicator();
+              },
+            ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () {},
@@ -247,9 +281,6 @@ class MyHomePage extends ConsumerWidget {
     //final writeApi = client.getWriteService();
     try {
       await writeApi.write(point);
-      if (kDebugMode) {
-        //print('Dati inviati a InfluxDB: ${point.toLineProtocol()}');
-      }
     } catch (e) {
       if (kDebugMode) {
         print('Errore durante l\'invio a InfluxDB: $e');
