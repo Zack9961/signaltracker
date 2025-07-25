@@ -100,6 +100,19 @@ Point createDataPointGPS({
   // .time(DateTime.now().toUtc()); // Il timestamp può essere aggiunto esplicitamente o lasciato generare al server
 }
 
+// Esempio di creazione di un punto dati
+Point createDataPointSignal({
+  required int mobileSignal, // Assumendo mobileSignalStrength sia un int (dBm)
+  required String location,
+  required String room,
+}) {
+  return Point('corso_IoT') // Measurement [3]
+      .addTag('location', location) // Tag obbligatorio [3]
+      .addTag('room', room) // Tag obbligatorio [3]
+      .addField('mobileSignal', mobileSignal);
+  // .time(DateTime.now().toUtc()); // Il timestamp può essere aggiunto esplicitamente o lasciato generare al server
+}
+
 void main() {
   runApp(ProviderScope(child: const MyApp()));
 }
@@ -145,6 +158,15 @@ class MyHomePage extends ConsumerWidget {
           children: [
             mobileSignal.when(
               data: (mobileSignal) {
+                //final currentPosition = mobileSignal; // Prende l'ultimo valore disponibile
+                if (mobileSignal != null) {
+                  final point = createDataPointSignal(
+                    mobileSignal: mobileSignal,
+                    location: 'Marche', // Sostituisci con valori reali
+                    room: 'PesaroUrbino', // Sostituisci con valori reali
+                  );
+                  _sendDataToInfluxDB(influxDBClient, point);
+                }
                 return Column(
                   children: [
                     Text(
@@ -175,8 +197,8 @@ class MyHomePage extends ConsumerWidget {
                   final point = createDataPointGPS(
                     latitude: currentPosition.latitude,
                     longitude: currentPosition.longitude,
-                    location: 'IlTuoLuogo', // Sostituisci con valori reali
-                    room: 'LaTuaStanza', // Sostituisci con valori reali
+                    location: 'Marche', // Sostituisci con valori reali
+                    room: 'PesaroUrbino', // Sostituisci con valori reali
                   );
                   _sendDataToInfluxDB(influxDBClient, point);
                 }
