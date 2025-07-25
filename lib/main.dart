@@ -264,11 +264,11 @@ class MyHomePage extends ConsumerWidget {
                 return const CircularProgressIndicator();
               },
             ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {},
-              child: const Text("Start Tracking"),
-            ),
+            // const SizedBox(height: 16),
+            // ElevatedButton(
+            //   onPressed: () {},
+            //   child: const Text("Start Tracking"),
+            // ),
           ],
         ),
       ),
@@ -278,7 +278,6 @@ class MyHomePage extends ConsumerWidget {
   // Funzione per inviare i dati a InfluxDB
   void _sendDataToInfluxDB(InfluxDBClient client, Point point) async {
     var writeApi = WriteService(client);
-    //final writeApi = client.getWriteService();
     try {
       await writeApi.write(point);
     } catch (e) {
