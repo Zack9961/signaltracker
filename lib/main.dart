@@ -8,10 +8,6 @@ import 'package:flutter/services.dart';
 import 'package:influxdb_client/api.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 
-// final addressStringProvider = Provider(
-//   (ref) => "http://192.168.1.72:8000/ciao.json",
-// );
-
 final InfluxDBClient influxDBClient = InfluxDBClient(
   url: 'http://informatica-iot.freeddns.org:8086',
   token:
